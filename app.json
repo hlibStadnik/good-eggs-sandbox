@@ -3,10 +3,14 @@
     "name": "good-eggs-sandbox",
     "slug": "good-eggs-sandbox",
     "version": "1.0.0",
+    "scheme": "good-eggs-sandbox",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "plugins": [
+      "expo-router"
+    ],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",

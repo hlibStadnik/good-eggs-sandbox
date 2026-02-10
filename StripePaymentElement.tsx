@@ -1,103 +1,136 @@
-import React, { useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { IntentConfiguration, useEmbeddedPaymentElement } from '@stripe/stripe-react-native';
+import React, { useMemo, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
+import {
+  EmbeddedPaymentElementConfiguration,
+  IntentConfiguration,
+  IntentCreationCallbackParams,
+  useEmbeddedPaymentElement,
+} from "@stripe/stripe-react-native";
+import { createPaymentIntent } from "./api";
 
 interface StripePaymentElementProps {
   amount: number;
   currency: string;
+  customerId: string;
+  customerSessionClientSecret: string;
+  saveCard: boolean;
   onPaymentSuccess: () => void;
-  loading: boolean;
-  setLoading: (loading: boolean) => void;
 }
 
 export default function StripePaymentElement({
   amount,
   currency,
+  customerId,
+  customerSessionClientSecret,
+  saveCard,
   onPaymentSuccess,
-  loading,
-  setLoading,
 }: StripePaymentElementProps) {
-  const elementConfig = useMemo(
+  const elementConfig = useMemo<EmbeddedPaymentElementConfiguration>(
     () => ({
-      merchantDisplayName: 'Good Eggs Sandbox',
-      returnURL: 'stripe-example://payment-return',
+      merchantDisplayName: "Demo App",
+      customerId: customerId,
+      customerSessionClientSecret: customerSessionClientSecret,
+      googlePay: {
+        testEnv: true,
+        merchantCountryCode: "US",
+        currencyCode: "USD",
+      },
+      // applePay: {
+      //   merchantCountryCode: "US",
+      // },
     }),
-    [],
+    [customerId, customerSessionClientSecret],
   );
 
-  const handleConfirmationToken = useCallback(async (confirmationToken: any) => {
-    try {
-      // Send request to server to create PaymentIntent
-      const response = await fetch('http://localhost:3000/create-intent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+  const handleConfirm = useCallback(
+    async (
+      confirmationToken: any,
+      shouldSavePaymentMethod: boolean,
+      intentCreationCallback: (params: IntentCreationCallbackParams) => void,
+    ) => {
+      console.log(
+        "🚀 ~ StripePaymentElement ~ confirmationToken:",
+        confirmationToken,
+      );
+      try {
+        const data = await createPaymentIntent({
+          paymentMethodId: confirmationToken.id,
           amount,
-          currency,
-          confirmationTokenId: confirmationToken.id,
-        }),
-      });
+          currency: "usd",
+          setup_future_usage: shouldSavePaymentMethod
+            ? "off_session"
+            : undefined,
+          confirmationTokenId: confirmationToken,
+          customerId: customerId,
+          saveCard: true,
+        });
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create payment intent');
+        if (!data.clientSecret) {
+          throw new Error("No client secret returned from server");
+        }
+
+        console.log(`Calling callback with clientSecret`);
+        intentCreationCallback({ clientSecret: data.clientSecret });
+      } catch (error: any) {
+        console.error(`Error in handleConfirm:`, error);
+        intentCreationCallback({
+          error: {
+            code: "Failed",
+            message: error.message || "Unknown error occurred",
+            localizedMessage: error.message || "Unknown error occurred",
+          } as IntentCreationError,
+        });
       }
+    },
+    [amount],
+  );
 
-      // Return the client secret from the server
-      return data.client_secret;
-    } catch (error: any) {
-      throw new Error(error.message || 'Failed to process payment');
-    }
-  }, [amount, currency]);
-
-  const intentConfig = useMemo<IntentConfiguration>(
+  const intentConfig = useMemo(
     () => ({
-      mode: {
-        amount,
-        currencyCode: currency,
-      },
-      confirmHandler: handleConfirmationToken,
+      confirmHandler: handleConfirm,
+      mode: { amount: amount, currencyCode: "USD" },
     }),
-    [amount, currency, handleConfirmationToken],
+    [handleConfirm],
   );
 
   const {
     embeddedPaymentElementView,
+    loadingError,
     paymentOption,
     confirm,
     clearPaymentOption,
     isLoaded,
   } = useEmbeddedPaymentElement(intentConfig, elementConfig);
+  console.log("🚀 ~ StripePaymentElement ~ loadingError:", loadingError);
 
   // Handle payment confirmation
   const handlePayment = async () => {
-    if (!confirm) {
-      Alert.alert('Error', 'Payment element not loaded');
-      return;
-    }
-
-    setLoading(true);
-
     try {
+      console.log("pay...");
       const result = await confirm();
+      console.log("pay...after confirm");
+      console.log("Payment result:", result);
 
-      if (result.status === 'completed') {
-        Alert.alert('Success', 'Payment completed successfully!');
+      if (result.status === "completed") {
+        Alert.alert("Success", "Payment completed successfully!");
         onPaymentSuccess();
-        clearPaymentOption?.();
-      } else if (result.status === 'canceled') {
-        Alert.alert('Payment Canceled', 'Payment was canceled.');
-      } else if (result.status === 'failed') {
-        Alert.alert('Payment Failed', 'Payment processing failed.');
+      } else if (result.status === "canceled") {
+        Alert.alert("Payment Canceled", "Payment was canceled.");
+      } else if (result.status === "failed") {
+        Alert.alert("Payment Failed", "Payment processing failed.");
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Payment processing failed.');
-      console.error('Payment error:', error);
+      Alert.alert("Error", error.message || "Payment processing failed.");
+      console.error("Payment error:", error);
     } finally {
-      setLoading(false);
+      clearPaymentOption?.();
     }
   };
 
@@ -119,7 +152,9 @@ export default function StripePaymentElement({
         {/* Display selected payment option */}
         {paymentOption && (
           <View style={styles.paymentOptionContainer}>
-            <Text style={styles.paymentOptionLabel}>Selected Payment Method:</Text>
+            <Text style={styles.paymentOptionLabel}>
+              Selected Payment Method:
+            </Text>
             <Text style={styles.paymentOptionValue}>{paymentOption.label}</Text>
           </View>
         )}
@@ -127,14 +162,16 @@ export default function StripePaymentElement({
 
       {/* Pay Button */}
       <TouchableOpacity
-        style={[styles.payButton, (loading || !isLoaded) && styles.payButtonDisabled]}
+        style={[styles.payButton, !isLoaded && styles.payButtonDisabled]}
         onPress={handlePayment}
-        disabled={loading || !isLoaded}
+        disabled={!isLoaded}
       >
-        {loading ? (
+        {!isLoaded ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.payButtonText}>Pay {currency} {(amount / 100).toFixed(2)}</Text>
+          <Text style={styles.payButtonText}>
+            Pay {currency} {(amount / 100).toFixed(2)}
+          </Text>
         )}
       </TouchableOpacity>
     </>
@@ -147,44 +184,44 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 10,
-    color: '#333',
+    color: "#333",
   },
   loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     minHeight: 200,
     marginVertical: 20,
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#666',
+    color: "#666",
   },
   paymentOptionContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: "#ddd",
     borderRadius: 8,
     padding: 12,
     marginTop: 10,
   },
   paymentOptionLabel: {
     fontSize: 12,
-    color: '#999',
+    color: "#999",
     marginBottom: 4,
   },
   paymentOptionValue: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
   },
   payButton: {
-    backgroundColor: '#5469d4',
+    backgroundColor: "#5469d4",
     paddingVertical: 16,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 20,
   },
   payButtonDisabled: {
@@ -192,7 +229,7 @@ const styles = StyleSheet.create({
   },
   payButtonText: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
+    fontWeight: "600",
+    color: "#fff",
   },
 });
