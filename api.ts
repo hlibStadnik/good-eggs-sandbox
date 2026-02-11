@@ -1,4 +1,6 @@
-const API_URL = 'http://localhost:3000';
+import { Platform } from "react-native";
+
+const API_URL = Platform.OS === "android" ? "http://10.0.2.2:3000" : "http://localhost:3000";
 
 export interface CreateCustomerParams {
   email: string;
@@ -8,18 +10,6 @@ export interface CreateCustomerParams {
 export interface CreateCustomerResponse {
   customer: string;
   customerSessionClientSecret: string;
-}
-
-export interface CreatePaymentIntentParams {
-  amount: number;
-  currency: string;
-  confirmationTokenId: string;
-  customerId: string;
-  saveCard: boolean;
-}
-
-export interface CreatePaymentIntentResponse {
-  client_secret: string;
 }
 
 export const createCustomer = async (
@@ -42,7 +32,6 @@ export const createCustomer = async (
   return data;
 };
 
-
 export interface CreatePaymentIntentParams {
   paymentMethodId: string;
   amount: number;
@@ -50,6 +39,8 @@ export interface CreatePaymentIntentParams {
   setup_future_usage?: string;
   storeCreditApplied?: number;
   total?: number;
+  customerId?: string;
+  saveCard?: boolean;
 }
 
 export interface PaymentIntentResponse {
@@ -76,6 +67,65 @@ export async function createPaymentIntent(
   const data = await response.json();
   return data;
 }
+
+export interface CreateSubscriptionIntentParams {
+  amount: number;
+  currency?: string;
+  customerId: string;
+  productNames?: string[];
+}
+
+export interface CreateSubscriptionIntentResponse {
+  subscriptionId: string;
+  clientSecret: string;
+  status: string;
+  currentPeriodEnd: number;
+}
+
+export const createSubscriptionIntent = async (
+  params: CreateSubscriptionIntentParams
+): Promise<CreateSubscriptionIntentResponse> => {
+  const response = await fetch(`${API_URL}/create-subscription-intent`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(params),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to create subscription intent');
+  }
+
+  return data;
+};
+
+export interface ConfirmSubscriptionParams {
+  subscriptionId: string;
+  paymentMethodId: string;
+}
+
+export const confirmSubscription = async (
+  params: ConfirmSubscriptionParams
+): Promise<any> => {
+  const response = await fetch(`${API_URL}/confirm-subscription`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(params),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to confirm subscription');
+  }
+
+  return data;
+};
 
 export interface CreateSubscriptionParams {
   amount: number;

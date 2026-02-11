@@ -96,8 +96,8 @@ export default function RegisterScreen() {
         const data = await createPaymentIntent({
           amount: 0, // 0 amount for card setup only
           currency: "usd",
-          confirmationTokenId: confirmationToken.id,
-          customerId,
+          paymentMethodId: confirmationToken.id,
+          customerId: customerId,
           saveCard: true,
         });
 
@@ -130,9 +130,9 @@ export default function RegisterScreen() {
     }
 
     try {
-      const { error: confirmError } = await confirm();
-      if (confirmError) {
-        Alert.alert("Payment Error", confirmError.message);
+      const result = await confirm();
+      if (result?.status === "failed") {
+        Alert.alert("Payment Error", "Failed to save card");
         return;
       }
 

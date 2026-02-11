@@ -7,7 +7,10 @@ const STRIPE_PUBLISHABLE_KEY =
 
 export default function TabLayout() {
   return (
-    <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
+    <StripeProvider
+      merchantIdentifier="testId"
+      publishableKey={STRIPE_PUBLISHABLE_KEY}
+    >
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: "#5469d4",
@@ -17,15 +20,15 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            title: "Payment",
-            tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>💳</Text>,
+            title: "Subscription",
+            tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>🔍</Text>,
           }}
         />
         <Tabs.Screen
-          name="subscription"
+          name="payment"
           options={{
-            title: "Subscription",
-            tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>🔍</Text>,
+            title: "Payment",
+            tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>💳</Text>,
           }}
         />
         <Tabs.Screen

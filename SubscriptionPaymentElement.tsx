@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -13,28 +13,27 @@ import {
   IntentCreationCallbackParams,
   useEmbeddedPaymentElement,
 } from "@stripe/stripe-react-native";
-import { createPaymentIntent } from "./api";
 
-interface StripePaymentElementProps {
-  amount: number;
-  currency: string;
+interface SubscriptionPaymentElementProps {
   customerId: string;
   customerSessionClientSecret: string;
-  saveCard: boolean;
+  amount: number;
+  productNames: string[];
   onPaymentSuccess: () => void;
 }
 
-export default function StripePaymentElement({
-  amount,
-  currency,
+export default function SubscriptionPaymentElement({
   customerId,
   customerSessionClientSecret,
-  saveCard,
+  amount,
+  productNames,
   onPaymentSuccess,
-}: StripePaymentElementProps) {
+}: SubscriptionPaymentElementProps) {
+  const [confirming, setConfirming] = useState(false);
+
   const elementConfig = useMemo<EmbeddedPaymentElementConfiguration>(
     () => ({
-      merchantDisplayName: "Demo App",
+      merchantDisplayName: "Good Eggs",
       customerId: customerId,
       customerSessionClientSecret: customerSessionClientSecret,
       googlePay: {
@@ -56,27 +55,45 @@ export default function StripePaymentElement({
       intentCreationCallback: (params: IntentCreationCallbackParams) => void,
     ) => {
       console.log(
-        "🚀 ~ StripePaymentElement ~ confirmationToken:",
+        "🚀 ~ SubscriptionPaymentElement ~ confirmationToken:",
         confirmationToken,
       );
       try {
-        const data = await createPaymentIntent({
-          paymentMethodId: confirmationToken.id,
-          amount,
-          currency: "usd",
-          setup_future_usage: shouldSavePaymentMethod
-            ? "off_session"
-            : undefined,
-          customerId: customerId,
-          saveCard: true,
-        });
+        // Server creates a subscription with the confirmationToken
+        const response = await fetch(
+          "http://localhost:3000/create-subscription",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              confirmationToken: confirmationToken.id,
+              customerId: customerId,
+              amount: amount,
+              productNames: productNames,
+            }),
+          },
+        );
 
-        if (!data.clientSecret) {
-          throw new Error("No client secret returned from server");
+        if (response.ok) {
+          const { clientSecret, subscriptionId } = await response.json();
+          console.log(
+            "🚀 ~ SubscriptionPaymentElement ~ clientSecret:",
+            clientSecret,
+          );
+          console.log("✅ Subscription created:", subscriptionId);
+          intentCreationCallback({ clientSecret: subscriptionId });
+          //   intentCreationCallback({ clientSecret });
+        } else {
+          const errorData = await response.json();
+          intentCreationCallback({
+            error: {
+              code: "Failed",
+              message: errorData.error || "Failed to create subscription",
+              localizedMessage:
+                errorData.error || "Failed to create subscription",
+            },
+          });
         }
-
-        console.log(`Calling callback with clientSecret`);
-        intentCreationCallback({ clientSecret: data.clientSecret });
       } catch (error: any) {
         console.error(`Error in handleConfirm:`, error);
         intentCreationCallback({
@@ -88,13 +105,16 @@ export default function StripePaymentElement({
         });
       }
     },
-    [amount],
+    [customerId, amount, productNames],
   );
 
-  const intentConfig = useMemo(
+  const intentConfig = useMemo<IntentConfiguration>(
     () => ({
       confirmHandler: handleConfirm,
-      mode: { amount: amount, currencyCode: "USD" },
+      mode: {
+        setupFutureUsage: "OffSession", // Important for subscriptions
+        currencyCode: "USD",
+      },
     }),
     [handleConfirm],
   );
@@ -107,27 +127,34 @@ export default function StripePaymentElement({
     clearPaymentOption,
     isLoaded,
   } = useEmbeddedPaymentElement(intentConfig, elementConfig);
+  console.log("🚀 ~ SubscriptionPaymentElement ~ loadingError:", loadingError);
 
   // Handle payment confirmation
   const handlePayment = async () => {
     try {
-      console.log("pay...");
+      setConfirming(true);
+      console.log("Confirming subscription payment...");
+
       const result = await confirm();
-      console.log("pay...after confirm");
       console.log("Payment result:", result);
 
-      if (result.status === "completed") {
-        Alert.alert("Success", "Payment completed successfully!");
+      if (result?.status === "completed") {
+        Alert.alert("Success", "Subscription activated successfully!");
         onPaymentSuccess();
-      } else if (result.status === "canceled") {
-        Alert.alert("Payment Canceled", "Payment was canceled.");
-      } else if (result.status === "failed") {
-        Alert.alert("Payment Failed", "Payment processing failed.");
+      } else if (result?.status === "canceled") {
+        Alert.alert("Payment Canceled", "Subscription setup was canceled.");
+      } else if (result?.status === "failed") {
+        const errorMsg = result?.error?.message || "Payment processing failed.";
+        console.error("Payment failed with error:", errorMsg);
+        Alert.alert("Payment Failed", errorMsg);
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Payment processing failed.");
       console.error("Payment error:", error);
+      console.error("Error message:", error?.message);
+      console.error("Error code:", error?.code);
+      Alert.alert("Error", error.message || "Payment processing failed.");
     } finally {
+      setConfirming(false);
       clearPaymentOption?.();
     }
   };
@@ -148,18 +175,19 @@ export default function StripePaymentElement({
         {embeddedPaymentElementView}
       </View>
 
-      {/* Pay Button */}
+      {/* Subscribe Button */}
       <TouchableOpacity
-        style={[styles.payButton, !isLoaded && styles.payButtonDisabled]}
+        style={[
+          styles.payButton,
+          (!isLoaded || confirming) && styles.payButtonDisabled,
+        ]}
         onPress={handlePayment}
-        disabled={!isLoaded}
+        disabled={!isLoaded || confirming}
       >
-        {!isLoaded ? (
+        {!isLoaded || confirming ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.payButtonText}>
-            Pay {currency} {(amount / 100).toFixed(2)}
-          </Text>
+          <Text style={styles.payButtonText}>Activate Subscription</Text>
         )}
       </TouchableOpacity>
     </>

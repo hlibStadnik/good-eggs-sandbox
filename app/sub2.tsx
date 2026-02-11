@@ -9,11 +9,8 @@ import {
   FlatList,
   ActivityIndicator,
 } from "react-native";
-import StripePaymentElement from "../StripePaymentElement";
-import {
-  createCustomer as apiCreateCustomer,
-  createSubscription,
-} from "../api";
+import SubscriptionPaymentElement from "../SubscriptionPaymentElement";
+import { createCustomer as apiCreateCustomer } from "../api";
 
 interface Product {
   id: string;
@@ -48,7 +45,6 @@ export default function ExploreScreen() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerSessionClientSecret, setCustomerSessionClientSecret] =
     useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   // Create a customer on component mount
   useEffect(() => {
@@ -62,8 +58,8 @@ export default function ExploreScreen() {
         name: "Test Customer",
       });
 
-      if (data.customerId && data.customerSessionClientSecret) {
-        setCustomerId(data.customerId);
+      if (data.customer && data.customerSessionClientSecret) {
+        setCustomerId(data.customer);
         setCustomerSessionClientSecret(data.customerSessionClientSecret);
       }
     } catch (error) {
@@ -113,6 +109,16 @@ export default function ExploreScreen() {
   };
 
   const cartTotal = calculateTotalPrice();
+
+  const handleShowPayment = async () => {
+    if (!customerId) {
+      Alert.alert("Error", "Customer not initialized");
+      return;
+    }
+
+    // No need to create subscription upfront - the confirmHandler will do it
+    setShowPayment(true);
+  };
 
   const handleSubscriptionSuccess = () => {
     Alert.alert(
@@ -182,7 +188,7 @@ export default function ExploreScreen() {
   if (showPayment && customerId && customerSessionClientSecret) {
     return (
       <ScrollView style={styles.container}>
-        <Text style={styles.title}>Monthly Subscription</Text>
+        <Text style={styles.title}>Complete Your Subscription</Text>
 
         {/* Cart Summary */}
         <View style={styles.summarySection}>
@@ -202,12 +208,11 @@ export default function ExploreScreen() {
         </View>
 
         {/* Subscription Payment Element */}
-        <StripePaymentElement
-          amount={cartTotal}
-          currency="usd"
+        <SubscriptionPaymentElement
           customerId={customerId}
           customerSessionClientSecret={customerSessionClientSecret}
-          saveCard={true}
+          amount={cartTotal}
+          productNames={cart.map((item) => item.product.name)}
           onPaymentSuccess={handleSubscriptionSuccess}
         />
 
@@ -258,16 +263,11 @@ export default function ExploreScreen() {
 
           <TouchableOpacity
             style={styles.checkoutButton}
-            onPress={() => setShowPayment(true)}
-            disabled={loading}
+            onPress={handleShowPayment}
           >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.checkoutButtonText}>
-                Set Up Monthly Subscription
-              </Text>
-            )}
+            <Text style={styles.checkoutButtonText}>
+              Set Up Monthly Subscription
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity

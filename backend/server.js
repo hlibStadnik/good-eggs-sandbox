@@ -134,6 +134,138 @@ app.post("/setup-intent", async (req, res) => {
 });
 
 /**
+ * Create a subscription with confirmation token
+ * POST /create-subscription
+ * Body: { confirmationToken: string, customerId: string, amount: number, productNames: string[] }
+ */
+app.post("/create-subscription", async (req, res) => {
+  try {
+    const { confirmationToken, customerId, amount, productNames } = req.body;
+    console.log(
+      "[POST] /create-subscription - Customer:",
+      customerId,
+      "Amount:",
+      amount,
+      "Products:",
+      productNames,
+    );
+
+    if (!confirmationToken) {
+      return res.status(400).json({ error: "Confirmation token is required" });
+    }
+
+    if (!customerId) {
+      return res.status(400).json({ error: "Customer ID is required" });
+    }
+
+    if (!amount || amount < 100) {
+      return res.status(400).json({ error: "Amount must be at least $1.00" });
+    }
+
+    // // Create a product for the subscription
+    // const product = await stripe.products.create({
+    //   name:
+    //     productNames && productNames.length > 0
+    //       ? productNames.join(", ")
+    //       : "Monthly Subscription",
+    // });
+
+    // // Create a price for monthly billing
+    // const price = await stripe.prices.create({
+    //   product: product.id,
+    //   unit_amount: amount,
+    //   currency: "usd",
+    //   recurring: {
+    //     interval: "month",
+    //     interval_count: 1,
+    //   },
+    // });
+
+    // confirmationToken.id is actually the payment method ID
+    const paymentMethodId = confirmationToken;
+
+    console.log(
+      "[POST] /create-subscription - Payment method:",
+      paymentMethodId,
+    );
+
+    // Attach the payment method to the customer
+    await stripe.paymentMethods.attach(paymentMethodId, {
+      customer: customerId,
+    });
+    console.log(
+      "[POST] /create-subscription - Payment method attached to customer",
+    );
+
+    // Create a subscription with the payment method
+    const subscription = await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price: "price_1SzHmaKCHAcCaB08621R7r4T" }],
+      payment_behavior: "default_incomplete",
+      // default_payment_method: paymentMethodId,
+      payment_settings: {
+        save_default_payment_method: "on_subscription",
+      },
+      expand: ["latest_invoice.confirmation_secret"],
+      // expand: ["latest_invoice.payment_intent", "pending_setup_intent"],
+    });
+    console.log("🚀 ~ subscription:", subscription.latest_invoice);
+
+    // Return the client secret from either the payment intent or setup intent
+    let clientSecret;
+    if (subscription.latest_invoice?.payment_intent) {
+      clientSecret = subscription.latest_invoice.payment_intent.client_secret;
+    } else if (subscription.pending_setup_intent) {
+      clientSecret = subscription.pending_setup_intent.client_secret;
+    }
+
+    res.json({
+      clientSecret,
+      subscriptionId: subscription.id,
+      status: subscription.status,
+    });
+  } catch (error) {
+    console.error("[POST] /create-subscription - Error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Confirm a subscription payment
+ * POST /confirm-subscription
+ * Body: { subscriptionId: string, paymentMethodId: string }
+ */
+app.post("/confirm-subscription", async (req, res) => {
+  try {
+    const { subscriptionId, paymentMethodId } = req.body;
+    console.log(
+      "[POST] /confirm-subscription - Subscription:",
+      subscriptionId,
+      "PaymentMethod:",
+      paymentMethodId,
+    );
+
+    // Attach payment method to the subscription
+    const subscription = await stripe.subscriptions.update(subscriptionId, {
+      default_payment_method: paymentMethodId,
+      payment_settings: {
+        save_default_payment_method: "on_subscription",
+      },
+    });
+
+    console.log("[POST] /confirm-subscription - Success:", subscription.id);
+    res.json({
+      subscriptionId: subscription.id,
+      status: subscription.status,
+      currentPeriodEnd: subscription.current_period_end,
+    });
+  } catch (error) {
+    console.error("[POST] /confirm-subscription - Error:", error.message);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
  * Create a subscription for recurring monthly charges
  * POST /create-subscription
  * Body: { amount: number (in cents), currency: string, confirmationTokenId: string, customerId: string, productName: string }
