@@ -34,6 +34,9 @@ app.get("/", (req, res) => {
   res.json({ status: "Stripe payment server running" });
 });
 
+const customerId = "cus_TwvA8yVWkzFvUJ";
+//customer@example.com
+
 /**
  * Create a PaymentIntent with confirmation token
  * POST /create-intent
@@ -134,99 +137,82 @@ app.post("/setup-intent", async (req, res) => {
 });
 
 /**
- * Create a subscription with confirmation token
+ * Create a subscription for recurring monthly charges
  * POST /create-subscription
- * Body: { confirmationToken: string, customerId: string, amount: number, productNames: string[] }
+ * Body: { amount: number (in cents), currency: string, confirmationTokenId: string, customerId: string, productName: string }
  */
 app.post("/create-subscription", async (req, res) => {
   try {
-    const { confirmationToken, customerId, amount, productNames } = req.body;
-    console.log(
-      "[POST] /create-subscription - Customer:",
-      customerId,
-      "Amount:",
-      amount,
-      "Products:",
-      productNames,
-    );
+    // const { amount, currency, confirmationTokenId, customerId, productName } =
+    //   req.body;
+    // console.log(
+    //   "[POST] /create-subscription - Amount:",
+    //   amount,
+    //   "Currency:",
+    //   currency,
+    //   "Customer:",
+    //   customerId,
+    //   "Product:",
+    //   productName,
+    // );
 
-    if (!confirmationToken) {
-      return res.status(400).json({ error: "Confirmation token is required" });
-    }
+    // // First, create or get a payment method from the confirmation token
+    // const paymentMethod =
+    //   await stripe.paymentMethods.retrieve(confirmationTokenId);
 
-    if (!customerId) {
-      return res.status(400).json({ error: "Customer ID is required" });
-    }
-
-    if (!amount || amount < 100) {
-      return res.status(400).json({ error: "Amount must be at least $1.00" });
-    }
+    // // Attach payment method to customer if not already attached
+    // await stripe.paymentMethods
+    //   .attach(confirmationTokenId, {
+    //     customer: customerId,
+    //   })
+    //   .catch(() => {
+    //     // Ignore if already attached
+    //   });
 
     // // Create a product for the subscription
     // const product = await stripe.products.create({
-    //   name:
-    //     productNames && productNames.length > 0
-    //       ? productNames.join(", ")
-    //       : "Monthly Subscription",
+    //   name: productName,
+    //   type: "service",
     // });
 
     // // Create a price for monthly billing
     // const price = await stripe.prices.create({
     //   product: product.id,
     //   unit_amount: amount,
-    //   currency: "usd",
+    //   currency: currency,
     //   recurring: {
     //     interval: "month",
     //     interval_count: 1,
     //   },
     // });
 
-    // confirmationToken.id is actually the payment method ID
-    const paymentMethodId = confirmationToken;
+    // Create the subscription
 
-    console.log(
-      "[POST] /create-subscription - Payment method:",
-      paymentMethodId,
-    );
+    const productId = "prod_TxCDl6X64uVjug";
+    const priceId = "price_1SzHovKCHAcCaB08m1Rtb5RR";
 
-    // Attach the payment method to the customer
-    await stripe.paymentMethods.attach(paymentMethodId, {
-      customer: customerId,
-    });
-    console.log(
-      "[POST] /create-subscription - Payment method attached to customer",
-    );
-
-    // Create a subscription with the payment method
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
-      items: [{ price: "price_1SzHmaKCHAcCaB08621R7r4T" }],
+      items: [
+        {
+          price: priceId,
+        },
+      ],
       payment_behavior: "default_incomplete",
-      // default_payment_method: paymentMethodId,
-      payment_settings: {
-        save_default_payment_method: "on_subscription",
-      },
+      payment_settings: { save_default_payment_method: "on_subscription" },
+      // billing_mode: { type: "flexible" },
       expand: ["latest_invoice.confirmation_secret"],
-      // expand: ["latest_invoice.payment_intent", "pending_setup_intent"],
     });
-    console.log("🚀 ~ subscription:", subscription.latest_invoice);
 
-    // Return the client secret from either the payment intent or setup intent
-    let clientSecret;
-    if (subscription.latest_invoice?.payment_intent) {
-      clientSecret = subscription.latest_invoice.payment_intent.client_secret;
-    } else if (subscription.pending_setup_intent) {
-      clientSecret = subscription.pending_setup_intent.client_secret;
-    }
-
-    res.json({
-      clientSecret,
+    res.send({
       subscriptionId: subscription.id,
-      status: subscription.status,
+      clientSecret:
+        subscription.latest_invoice.confirmation_secret.client_secret,
+      customerId,
     });
   } catch (error) {
     console.error("[POST] /create-subscription - Error:", error.message);
-    res.status(500).json({ error: error.message });
+    res.status(400).json({ error: error.message });
   }
 });
 
@@ -235,158 +221,74 @@ app.post("/create-subscription", async (req, res) => {
  * POST /confirm-subscription
  * Body: { subscriptionId: string, paymentMethodId: string }
  */
-app.post("/confirm-subscription", async (req, res) => {
-  try {
-    const { subscriptionId, paymentMethodId } = req.body;
-    console.log(
-      "[POST] /confirm-subscription - Subscription:",
-      subscriptionId,
-      "PaymentMethod:",
-      paymentMethodId,
-    );
 
-    // Attach payment method to the subscription
-    const subscription = await stripe.subscriptions.update(subscriptionId, {
-      default_payment_method: paymentMethodId,
-      payment_settings: {
-        save_default_payment_method: "on_subscription",
-      },
-    });
+// app.post("/confirm-subscription", async (req, res) => {
+//   try {
+//     const { subscriptionId, paymentMethodId } = req.body;
+//     console.log(
+//       "[POST] /confirm-subscription - Subscription:",
+//       subscriptionId,
+//       "PaymentMethod:",
+//       paymentMethodId,
+//     );
 
-    console.log("[POST] /confirm-subscription - Success:", subscription.id);
-    res.json({
-      subscriptionId: subscription.id,
-      status: subscription.status,
-      currentPeriodEnd: subscription.current_period_end,
-    });
-  } catch (error) {
-    console.error("[POST] /confirm-subscription - Error:", error.message);
-    res.status(400).json({ error: error.message });
-  }
-});
+//     // Attach payment method to the subscription
+//     const subscription = await stripe.subscriptions.update(subscriptionId, {
+//       default_payment_method: paymentMethodId,
+//       payment_settings: {
+//         save_default_payment_method: "on_subscription",
+//       },
+//     });
 
-/**
- * Create a subscription for recurring monthly charges
- * POST /create-subscription
- * Body: { amount: number (in cents), currency: string, confirmationTokenId: string, customerId: string, productName: string }
- */
-app.post("/create-subscription", async (req, res) => {
-  try {
-    const { amount, currency, confirmationTokenId, customerId, productName } =
-      req.body;
-    console.log(
-      "[POST] /create-subscription - Amount:",
-      amount,
-      "Currency:",
-      currency,
-      "Customer:",
-      customerId,
-      "Product:",
-      productName,
-    );
+//     console.log("[POST] /confirm-subscription - Success:", subscription.id);
+//     res.json({
+//       subscriptionId: subscription.id,
+//       status: subscription.status,
+//       currentPeriodEnd: subscription.current_period_end,
+//     });
+//   } catch (error) {
+//     console.error("[POST] /confirm-subscription - Error:", error.message);
+//     res.status(400).json({ error: error.message });
+//   }
+// });
 
-    if (!amount || amount < 100) {
-      console.warn("[POST] /create-subscription - Invalid amount:", amount);
-      return res.status(400).json({ error: "Amount must be at least $1.00" });
-    }
+// /**
+//  * Get subscription details
+//  * GET /subscription/:subscriptionId
+//  */
+// app.get("/subscription/:subscriptionId", async (req, res) => {
+//   try {
+//     const { subscriptionId } = req.params;
+//     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+//     res.json({
+//       subscriptionId: subscription.id,
+//       status: subscription.status,
+//       currentPeriodEnd: subscription.current_period_end,
+//       amount: subscription.items.data[0]?.price.unit_amount,
+//       currency: subscription.items.data[0]?.price.currency,
+//     });
+//   } catch (error) {
+//     console.error("[GET] /subscription - Error:", error.message);
+//     res.status(400).json({ error: error.message });
+//   }
+// });
 
-    if (!customerId) {
-      console.warn("[POST] /create-subscription - Missing customer ID");
-      return res.status(400).json({ error: "Customer ID is required" });
-    }
-
-    // First, create or get a payment method from the confirmation token
-    const paymentMethod =
-      await stripe.paymentMethods.retrieve(confirmationTokenId);
-
-    // Attach payment method to customer if not already attached
-    await stripe.paymentMethods
-      .attach(confirmationTokenId, {
-        customer: customerId,
-      })
-      .catch(() => {
-        // Ignore if already attached
-      });
-
-    // Create a product for the subscription
-    const product = await stripe.products.create({
-      name: productName,
-      type: "service",
-    });
-
-    // Create a price for monthly billing
-    const price = await stripe.prices.create({
-      product: product.id,
-      unit_amount: amount,
-      currency: currency,
-      recurring: {
-        interval: "month",
-        interval_count: 1,
-      },
-    });
-
-    // Create the subscription
-    const subscription = await stripe.subscriptions.create({
-      customer: customerId,
-      items: [
-        {
-          price: price.id,
-        },
-      ],
-      default_payment_method: confirmationTokenId,
-      billing_cycle_anchor: Math.floor(Date.now() / 1000),
-    });
-
-    console.log("[POST] /create-subscription - Success:", subscription.id);
-    res.json({
-      subscriptionId: subscription.id,
-      clientSecret: subscription.latest_invoice?.payment_intent?.client_secret,
-      status: subscription.status,
-      currentPeriodEnd: subscription.current_period_end,
-    });
-  } catch (error) {
-    console.error("[POST] /create-subscription - Error:", error.message);
-    res.status(400).json({ error: error.message });
-  }
-});
-
-/**
- * Get subscription details
- * GET /subscription/:subscriptionId
- */
-app.get("/subscription/:subscriptionId", async (req, res) => {
-  try {
-    const { subscriptionId } = req.params;
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    res.json({
-      subscriptionId: subscription.id,
-      status: subscription.status,
-      currentPeriodEnd: subscription.current_period_end,
-      amount: subscription.items.data[0]?.price.unit_amount,
-      currency: subscription.items.data[0]?.price.currency,
-    });
-  } catch (error) {
-    console.error("[GET] /subscription - Error:", error.message);
-    res.status(400).json({ error: error.message });
-  }
-});
-
-/**
- * Cancel a subscription
- * POST /cancel-subscription
- * Body: { subscriptionId: string }
- */
-app.post("/cancel-subscription", async (req, res) => {
-  try {
-    const { subscriptionId } = req.body;
-    const subscription = await stripe.subscriptions.del(subscriptionId);
-    console.log("[POST] /cancel-subscription - Success:", subscriptionId);
-    res.json({ subscriptionId: subscription.id, status: subscription.status });
-  } catch (error) {
-    console.error("[POST] /cancel-subscription - Error:", error.message);
-    res.status(400).json({ error: error.message });
-  }
-});
+// /**
+//  * Cancel a subscription
+//  * POST /cancel-subscription
+//  * Body: { subscriptionId: string }
+//  */
+// app.post("/cancel-subscription", async (req, res) => {
+//   try {
+//     const { subscriptionId } = req.body;
+//     const subscription = await stripe.subscriptions.del(subscriptionId);
+//     console.log("[POST] /cancel-subscription - Success:", subscriptionId);
+//     res.json({ subscriptionId: subscription.id, status: subscription.status });
+//   } catch (error) {
+//     console.error("[POST] /cancel-subscription - Error:", error.message);
+//     res.status(400).json({ error: error.message });
+//   }
+// });
 
 // Start server
 app.listen(PORT, () => {

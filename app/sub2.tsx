@@ -10,7 +10,11 @@ import {
   ActivityIndicator,
 } from "react-native";
 import SubscriptionPaymentElement from "../SubscriptionPaymentElement";
-import { createCustomer as apiCreateCustomer } from "../api";
+import {
+  createCustomer as apiCreateCustomer,
+  createSubscription,
+} from "../api";
+import { PaymentSheetError, useStripe } from "@stripe/stripe-react-native";
 
 interface Product {
   id: string;
@@ -24,24 +28,7 @@ interface CartItem {
   quantity: number;
 }
 
-const PRODUCTS: Product[] = [
-  {
-    id: "1",
-    name: "Organic Vegetables Bundle",
-    monthlyPrice: 2999, // $29.99 in cents
-    description: "Fresh seasonal vegetables delivered monthly",
-  },
-  {
-    id: "2",
-    name: "Organic Fruits Selection",
-    monthlyPrice: 2499, // $24.99 in cents
-    description: "Assorted organic fruits every month",
-  },
-];
-
 export default function ExploreScreen() {
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [showPayment, setShowPayment] = useState(false);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerSessionClientSecret, setCustomerSessionClientSecret] =
     useState<string | null>(null);
@@ -53,177 +40,54 @@ export default function ExploreScreen() {
 
   const createCustomer = async () => {
     try {
-      const data = await apiCreateCustomer({
-        email: "customer@example.com",
-        name: "Test Customer",
-      });
+      const data = await createSubscription();
+      setCustomerSessionClientSecret(data.clientSecret);
+      setCustomerId(data.customerId);
 
-      if (data.customer && data.customerSessionClientSecret) {
-        setCustomerId(data.customer);
-        setCustomerSessionClientSecret(data.customerSessionClientSecret);
-      }
+      console.log("🚀 ~ createCustomer ~ data:", data);
     } catch (error) {
       console.error("Failed to create customer:", error);
     }
   };
 
-  const addToCart = (product: Product) => {
-    setCart((prevCart) => {
-      const existingItem = prevCart.find(
-        (item) => item.product.id === product.id,
-      );
-      if (existingItem) {
-        return prevCart.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        );
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+
+  React.useEffect(() => {
+    const initializePaymentSheet = async () => {
+      const { error } = await initPaymentSheet({
+        paymentIntentClientSecret: customerSessionClientSecret || "",
+        customerId: customerId || "",
+        merchantDisplayName: "Good Eggs",
+        returnURL: "stripe-example://payment-sheet",
+        // Set `allowsDelayedPaymentMethods` to true if your business handles
+        // delayed notification payment methods like US bank accounts.
+        allowsDelayedPaymentMethods: true,
+      });
+      if (error) {
+        // Handle error
       }
-      return [...prevCart, { product, quantity: 1 }];
-    });
-  };
+    };
 
-  const removeFromCart = (productId: string) => {
-    setCart((prevCart) =>
-      prevCart.filter((item) => item.product.id !== productId),
-    );
-  };
+    if (customerSessionClientSecret && customerId) {
+      console.log("init paymant shit");
 
-  const updateQuantity = (productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(productId);
+      initializePaymentSheet();
+    }
+  }, [customerSessionClientSecret, customerId, initPaymentSheet]);
+
+  async function handleShowPayment(): Promise<void> {
+    const { error } = await presentPaymentSheet();
+    if (error) {
+      console.log("🚀 ~ handleShowPayment ~ error:", error);
+      if (error.code === PaymentSheetError.Failed) {
+        // Handle failed
+      } else if (error.code === PaymentSheetError.Canceled) {
+        // Handle canceled
+      }
     } else {
-      setCart((prevCart) =>
-        prevCart.map((item) =>
-          item.product.id === productId ? { ...item, quantity } : item,
-        ),
-      );
+      Alert.alert("Success", "Your subscription has been set up!");
+      // Payment succeeded
     }
-  };
-
-  const calculateTotalPrice = () => {
-    return cart.reduce(
-      (total, item) => total + item.product.monthlyPrice * item.quantity,
-      0,
-    );
-  };
-
-  const cartTotal = calculateTotalPrice();
-
-  const handleShowPayment = async () => {
-    if (!customerId) {
-      Alert.alert("Error", "Customer not initialized");
-      return;
-    }
-
-    // No need to create subscription upfront - the confirmHandler will do it
-    setShowPayment(true);
-  };
-
-  const handleSubscriptionSuccess = () => {
-    Alert.alert(
-      "Subscription Started!",
-      "Your monthly subscription has been activated successfully!",
-    );
-    setCart([]);
-    setShowPayment(false);
-  };
-
-  const renderProductCard = ({ item }: { item: Product }) => {
-    const inCart = cart.find((cartItem) => cartItem.product.id === item.id);
-
-    return (
-      <View style={styles.productCard}>
-        <Text style={styles.productName}>{item.name}</Text>
-        <Text style={styles.productDescription}>{item.description}</Text>
-        <View style={styles.productFooter}>
-          <Text style={styles.productPrice}>
-            ${(item.monthlyPrice / 100).toFixed(2)}/month
-          </Text>
-          <TouchableOpacity
-            style={[styles.addButton, inCart && styles.addButtonActive]}
-            onPress={() => addToCart(item)}
-          >
-            <Text style={styles.addButtonText}>
-              {inCart ? "✓ In Cart" : "Add"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
-
-  const renderCartItem = ({ item }: { item: CartItem }) => (
-    <View style={styles.cartItem}>
-      <View style={styles.cartItemInfo}>
-        <Text style={styles.cartItemName}>{item.product.name}</Text>
-        <Text style={styles.cartItemPrice}>
-          ${(item.product.monthlyPrice / 100).toFixed(2)} × {item.quantity}
-        </Text>
-      </View>
-      <View style={styles.cartItemControls}>
-        <TouchableOpacity
-          onPress={() => updateQuantity(item.product.id, item.quantity - 1)}
-          style={styles.quantityButton}
-        >
-          <Text style={styles.quantityText}>−</Text>
-        </TouchableOpacity>
-        <Text style={styles.quantityNumber}>{item.quantity}</Text>
-        <TouchableOpacity
-          onPress={() => updateQuantity(item.product.id, item.quantity + 1)}
-          style={styles.quantityButton}
-        >
-          <Text style={styles.quantityText}>+</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => removeFromCart(item.product.id)}
-          style={styles.removeButton}
-        >
-          <Text style={styles.removeButtonText}>Remove</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  if (showPayment && customerId && customerSessionClientSecret) {
-    return (
-      <ScrollView style={styles.container}>
-        <Text style={styles.title}>Complete Your Subscription</Text>
-
-        {/* Cart Summary */}
-        <View style={styles.summarySection}>
-          <Text style={styles.summaryTitle}>Order Summary</Text>
-          <FlatList
-            data={cart}
-            renderItem={renderCartItem}
-            keyExtractor={(item) => item.product.id}
-            scrollEnabled={false}
-          />
-          <View style={styles.summaryTotal}>
-            <Text style={styles.summaryLabel}>Monthly Total:</Text>
-            <Text style={styles.summaryAmount}>
-              ${(cartTotal / 100).toFixed(2)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Subscription Payment Element */}
-        <SubscriptionPaymentElement
-          customerId={customerId}
-          customerSessionClientSecret={customerSessionClientSecret}
-          amount={cartTotal}
-          productNames={cart.map((item) => item.product.name)}
-          onPaymentSuccess={handleSubscriptionSuccess}
-        />
-
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => setShowPayment(false)}
-        >
-          <Text style={styles.backButtonText}>← Back to Products</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    );
   }
 
   return (
@@ -235,57 +99,17 @@ export default function ExploreScreen() {
 
       {/* Products Section */}
       <Text style={styles.sectionTitle}>Available Products</Text>
-      <FlatList
-        data={PRODUCTS}
-        renderItem={renderProductCard}
-        keyExtractor={(item) => item.id}
-        scrollEnabled={false}
-      />
 
-      {/* Cart Summary */}
-      {cart.length > 0 && (
-        <View style={styles.cartSection}>
-          <Text style={styles.cartTitle}>
-            Your Subscription ({cart.length} items)
+      <View style={styles.cartSection}>
+        <TouchableOpacity
+          style={styles.checkoutButton}
+          onPress={handleShowPayment}
+        >
+          <Text style={styles.checkoutButtonText}>
+            Set Up Monthly Subscription
           </Text>
-          <FlatList
-            data={cart}
-            renderItem={renderCartItem}
-            keyExtractor={(item) => item.product.id}
-            scrollEnabled={false}
-          />
-          <View style={styles.cartTotal}>
-            <Text style={styles.cartTotalLabel}>Monthly Total:</Text>
-            <Text style={styles.cartTotalAmount}>
-              ${(cartTotal / 100).toFixed(2)}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.checkoutButton}
-            onPress={handleShowPayment}
-          >
-            <Text style={styles.checkoutButtonText}>
-              Set Up Monthly Subscription
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.clearButton}
-            onPress={() => setCart([])}
-          >
-            <Text style={styles.clearButtonText}>Clear Cart</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {cart.length === 0 && (
-        <View style={styles.emptyCart}>
-          <Text style={styles.emptyCartText}>
-            Add products to start your monthly subscription
-          </Text>
-        </View>
-      )}
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }

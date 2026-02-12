@@ -140,17 +140,18 @@ export interface CreateSubscriptionResponse {
   clientSecret: string;
   status: string;
   currentPeriodEnd: number;
+  customerId: string;
 }
 
 export const createSubscription = async (
-  params: CreateSubscriptionParams
+  // params: CreateSubscriptionParams
 ): Promise<CreateSubscriptionResponse> => {
   const response = await fetch(`${API_URL}/create-subscription`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(params),
+    // body: JSON.stringify(params),
   });
 
   const data = await response.json();
