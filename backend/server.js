@@ -143,51 +143,6 @@ app.post("/setup-intent", async (req, res) => {
  */
 app.post("/create-subscription", async (req, res) => {
   try {
-    // const { amount, currency, confirmationTokenId, customerId, productName } =
-    //   req.body;
-    // console.log(
-    //   "[POST] /create-subscription - Amount:",
-    //   amount,
-    //   "Currency:",
-    //   currency,
-    //   "Customer:",
-    //   customerId,
-    //   "Product:",
-    //   productName,
-    // );
-
-    // // First, create or get a payment method from the confirmation token
-    // const paymentMethod =
-    //   await stripe.paymentMethods.retrieve(confirmationTokenId);
-
-    // // Attach payment method to customer if not already attached
-    // await stripe.paymentMethods
-    //   .attach(confirmationTokenId, {
-    //     customer: customerId,
-    //   })
-    //   .catch(() => {
-    //     // Ignore if already attached
-    //   });
-
-    // // Create a product for the subscription
-    // const product = await stripe.products.create({
-    //   name: productName,
-    //   type: "service",
-    // });
-
-    // // Create a price for monthly billing
-    // const price = await stripe.prices.create({
-    //   product: product.id,
-    //   unit_amount: amount,
-    //   currency: currency,
-    //   recurring: {
-    //     interval: "month",
-    //     interval_count: 1,
-    //   },
-    // });
-
-    // Create the subscription
-
     const productId = "prod_TxCDl6X64uVjug";
     const priceId = "price_1SzHovKCHAcCaB08m1Rtb5RR";
 

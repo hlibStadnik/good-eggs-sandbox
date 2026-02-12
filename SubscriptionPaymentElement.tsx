@@ -54,19 +54,16 @@ export default function SubscriptionPaymentElement({
       shouldSavePaymentMethod: boolean,
       intentCreationCallback: (params: IntentCreationCallbackParams) => void,
     ) => {
-      console.log(
-        "🚀 ~ SubscriptionPaymentElement ~ confirmationToken:",
-        confirmationToken,
-      );
       try {
         // Server creates a subscription with the confirmationToken
+        console.log("🚀 ~ handleConfirm ~ amount:", amount);
+
         const response = await fetch(
           "http://localhost:3000/create-subscription",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              confirmationToken: confirmationToken.id,
               customerId: customerId,
               amount: amount,
               productNames: productNames,
@@ -75,14 +72,8 @@ export default function SubscriptionPaymentElement({
         );
 
         if (response.ok) {
-          const { clientSecret, subscriptionId } = await response.json();
-          console.log(
-            "🚀 ~ SubscriptionPaymentElement ~ clientSecret:",
-            clientSecret,
-          );
-          console.log("✅ Subscription created:", subscriptionId);
-          intentCreationCallback({ clientSecret: subscriptionId });
-          //   intentCreationCallback({ clientSecret });
+          const { clientSecret } = await response.json();
+          intentCreationCallback({ clientSecret });
         } else {
           const errorData = await response.json();
           intentCreationCallback({
@@ -108,16 +99,17 @@ export default function SubscriptionPaymentElement({
     [customerId, amount, productNames],
   );
 
-  const intentConfig = useMemo<IntentConfiguration>(
-    () => ({
+  const intentConfig = useMemo<IntentConfiguration>(() => {
+    return {
       confirmHandler: handleConfirm,
       mode: {
         setupFutureUsage: "OffSession", // Important for subscriptions
         currencyCode: "USD",
+        amount: amount,
       },
-    }),
-    [handleConfirm],
-  );
+    };
+  }, [handleConfirm, amount]);
+  console.log("🚀 ~ SubscriptionPaymentElement ~ intentConfig:", intentConfig);
 
   const {
     embeddedPaymentElementView,
@@ -127,7 +119,6 @@ export default function SubscriptionPaymentElement({
     clearPaymentOption,
     isLoaded,
   } = useEmbeddedPaymentElement(intentConfig, elementConfig);
-  console.log("🚀 ~ SubscriptionPaymentElement ~ loadingError:", loadingError);
 
   // Handle payment confirmation
   const handlePayment = async () => {
