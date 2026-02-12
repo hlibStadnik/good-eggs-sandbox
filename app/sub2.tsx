@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,89 +6,155 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
-  FlatList,
   ActivityIndicator,
+  Platform,
 } from "react-native";
-import SubscriptionPaymentElement from "../SubscriptionPaymentElement";
+import { createCustomer as apiCreateCustomer } from "../api";
 import {
-  createCustomer as apiCreateCustomer,
-  createSubscription,
-} from "../api";
-import { PaymentSheetError, useStripe } from "@stripe/stripe-react-native";
+  EmbeddedPaymentElementConfiguration,
+  IntentConfiguration,
+  IntentCreationCallbackParams,
+  useEmbeddedPaymentElement,
+} from "@stripe/stripe-react-native";
 
-interface Product {
-  id: string;
-  name: string;
-  monthlyPrice: number;
-  description: string;
-}
-
-interface CartItem {
-  product: Product;
-  quantity: number;
-}
+const API_URL =
+  Platform.OS === "android" ? "http://10.0.2.2:3000" : "http://localhost:3000";
 
 export default function ExploreScreen() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerSessionClientSecret, setCustomerSessionClientSecret] =
     useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
-  // Create a customer on component mount
+  // Create a customer session on mount
   useEffect(() => {
-    createCustomer();
+    initCustomerSession();
   }, []);
 
-  const createCustomer = async () => {
+  const initCustomerSession = async () => {
     try {
-      const data = await createSubscription();
-      setCustomerSessionClientSecret(data.clientSecret);
-      setCustomerId(data.customerId);
-
-      console.log("🚀 ~ createCustomer ~ data:", data);
+      const data = await apiCreateCustomer({
+        email: "customer@example.com",
+        name: "Test Customer",
+      });
+      setCustomerId(data.customer);
+      setCustomerSessionClientSecret(data.customerSessionClientSecret);
+      console.log("🚀 ~ initCustomerSession ~ data:", data);
     } catch (error) {
-      console.error("Failed to create customer:", error);
+      console.error("Failed to create customer session:", error);
     }
   };
 
-  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  /**
+   * confirmHandler - called when the user confirms payment.
+   * Creates a subscription on the server, then passes the clientSecret
+   * back to the SDK so it can finish confirming the underlying PaymentIntent.
+   */
+  const confirmHandler = useCallback(
+    async (
+      paymentMethod: any,
+      shouldSavePaymentMethod: boolean,
+      intentCreationCallback: (result: IntentCreationCallbackParams) => void,
+    ) => {
+      console.log("🚀 ~ confirmHandler ~ paymentMethod:", paymentMethod);
+      console.log(
+        "🚀 ~ confirmHandler ~ shouldSavePaymentMethod:",
+        shouldSavePaymentMethod,
+      );
 
-  React.useEffect(() => {
-    const initializePaymentSheet = async () => {
-      const { error } = await initPaymentSheet({
-        paymentIntentClientSecret: customerSessionClientSecret || "",
-        customerId: customerId || "",
-        merchantDisplayName: "Good Eggs",
-        returnURL: "stripe-example://payment-sheet",
-        // Set `allowsDelayedPaymentMethods` to true if your business handles
-        // delayed notification payment methods like US bank accounts.
-        allowsDelayedPaymentMethods: true,
-      });
-      if (error) {
-        // Handle error
+      try {
+        const response = await fetch(`${API_URL}/create-subscription`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerId,
+          }),
+        });
+
+        if (response.ok) {
+          const { clientSecret, subscriptionId } = await response.json();
+          console.log("✅ Subscription created:", subscriptionId);
+          intentCreationCallback({ clientSecret });
+        } else {
+          const errorData = await response.json();
+          intentCreationCallback({
+            error: {
+              code: "Failed",
+              message: errorData.error || "Failed to create subscription",
+              localizedMessage:
+                errorData.error || "Failed to create subscription",
+            },
+          });
+        }
+      } catch (error: any) {
+        console.error("Error in confirmHandler:", error);
+        intentCreationCallback({
+          error: {
+            code: "Failed",
+            message: error.message || "Unknown error occurred",
+            localizedMessage: error.message || "Unknown error occurred",
+          },
+        });
       }
-    };
+    },
+    [customerId],
+  );
 
-    if (customerSessionClientSecret && customerId) {
-      console.log("init paymant shit");
+  const intentConfig: IntentConfiguration = useMemo(
+    () => ({
+      mode: {
+        amount: 2499, // Must match the subscription price on the server (in cents)
+        currencyCode: "USD",
+        setupFutureUsage: "OffSession",
+      },
+      confirmHandler,
+    }),
+    [confirmHandler],
+  );
 
-      initializePaymentSheet();
-    }
-  }, [customerSessionClientSecret, customerId, initPaymentSheet]);
+  const configuration: EmbeddedPaymentElementConfiguration = useMemo(
+    () => ({
+      merchantDisplayName: "Good Eggs",
+      returnURL: "stripe-example://payment-sheet",
+      allowsDelayedPaymentMethods: true,
+      customerId: customerId || "",
+      customerSessionClientSecret: customerSessionClientSecret || "",
+    }),
+    [customerId, customerSessionClientSecret],
+  );
 
-  async function handleShowPayment(): Promise<void> {
-    const { error } = await presentPaymentSheet();
-    if (error) {
-      console.log("🚀 ~ handleShowPayment ~ error:", error);
-      if (error.code === PaymentSheetError.Failed) {
-        // Handle failed
-      } else if (error.code === PaymentSheetError.Canceled) {
-        // Handle canceled
+  const {
+    embeddedPaymentElementView,
+    loadingError,
+    isLoaded,
+    confirm,
+    paymentOption,
+  } = useEmbeddedPaymentElement(intentConfig, configuration);
+
+  console.log("🚀 ~ ExploreScreen ~ loadingError:", loadingError);
+
+  const handleSubscribe = async () => {
+    try {
+      setConfirming(true);
+      const result = await confirm();
+      console.log("🚀 ~ handleSubscribe ~ result:", result);
+
+      if (result?.status === "completed") {
+        Alert.alert("Success", "Your subscription has been activated!");
+      } else if (result?.status === "canceled") {
+        Alert.alert("Canceled", "Subscription setup was canceled.");
+      } else if (result?.status === "failed") {
+        const errorMsg = result?.error?.message || "Payment processing failed.";
+        console.error("Payment failed:", errorMsg);
+        Alert.alert("Payment Failed", errorMsg);
       }
-    } else {
-      Alert.alert("Success", "Your subscription has been set up!");
-      // Payment succeeded
+    } catch (error: any) {
+      console.error("Payment error:", error);
+      Alert.alert("Error", error.message || "Payment processing failed.");
+    } finally {
+      setConfirming(false);
     }
-  }
+  };
 
   return (
     <ScrollView style={styles.container}>
@@ -97,17 +163,36 @@ export default function ExploreScreen() {
         Choose products to receive monthly. Billed the same amount each month.
       </Text>
 
-      {/* Products Section */}
-      <Text style={styles.sectionTitle}>Available Products</Text>
+      {/* Payment Method Section */}
+      <Text style={styles.sectionTitle}>Payment Method</Text>
+      {isLoaded ? (
+        embeddedPaymentElementView
+      ) : (
+        <ActivityIndicator size="large" color="#5469d4" />
+      )}
+
+      {paymentOption && (
+        <Text style={{ marginTop: 8, color: "#666" }}>
+          Selected: {paymentOption.label}
+        </Text>
+      )}
 
       <View style={styles.cartSection}>
         <TouchableOpacity
-          style={styles.checkoutButton}
-          onPress={handleShowPayment}
+          style={[
+            styles.checkoutButton,
+            (!isLoaded || confirming) && { opacity: 0.6 },
+          ]}
+          onPress={handleSubscribe}
+          disabled={!isLoaded || confirming}
         >
-          <Text style={styles.checkoutButtonText}>
-            Set Up Monthly Subscription
-          </Text>
+          {confirming ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.checkoutButtonText}>
+              Set Up Monthly Subscription
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </ScrollView>
