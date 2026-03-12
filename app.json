@@ -7,9 +7,10 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-asset"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
