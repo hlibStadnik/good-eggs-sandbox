@@ -87,10 +87,10 @@ app.post("/create-intent", async (req, res) => {
   }
 });
 
-app.post("/setup-intent", async (req, res) => {
+app.post("/setup-session", async (req, res) => {
   try {
     const { email, name } = req.body;
-    console.log("[POST] /setup-intent - Email:", email, "Name:", name);
+    console.log("[POST] /setup-session - Email:", email, "Name:", name);
 
     let customer;
 
@@ -101,7 +101,7 @@ app.post("/setup-intent", async (req, res) => {
 
     if (existingCustomers.data.length > 0) {
       console.log(
-        "[POST] /setup-intent - Customer already exists:",
+        "[POST] /setup-session - Customer already exists:",
         existingCustomers.data[0].id,
       );
       customer = existingCustomers.data[0];

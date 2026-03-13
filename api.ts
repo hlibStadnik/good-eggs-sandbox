@@ -15,7 +15,7 @@ export interface CreateCustomerResponse {
 export const createCustomer = async (
   params: CreateCustomerParams
 ): Promise<CreateCustomerResponse> => {
-  const response = await fetch(`${API_URL}/setup-intent`, {
+  const response = await fetch(`${API_URL}/setup-session`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
