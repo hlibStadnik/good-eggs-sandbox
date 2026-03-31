@@ -18,10 +18,15 @@ export default function KlarnaPaymentScreen() {
   const handlePayPress = async () => {
     try {
       const { clientSecret } = await createKlarnaPaymentIntent();
+      console.log("🚀 ~ handlePayPress ~ clientSecret:", clientSecret);
 
       const { error, paymentIntent } = await confirmPayment(clientSecret, {
         paymentMethodType: "Klarna",
-        paymentMethodData: {},
+        paymentMethodData: {
+          billingDetails: {
+            email,
+          },
+        },
       });
 
       if (error) {

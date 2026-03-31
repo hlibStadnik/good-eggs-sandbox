@@ -8,8 +8,10 @@ const STRIPE_PUBLISHABLE_KEY =
 export default function TabLayout() {
   return (
     <StripeProvider
-      merchantIdentifier="testId"
       publishableKey={STRIPE_PUBLISHABLE_KEY}
+      merchantIdentifier={"merchant.com.stripe.react.native"}
+      urlScheme={"com.stripe.react.native"}
+      setReturnUrlSchemeOnAndroid={true}
     >
       <Tabs
         screenOptions={{
