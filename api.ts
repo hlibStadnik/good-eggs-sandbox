@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 
-const API_URL = Platform.OS === "android" ? "http://10.0.2.2:3000" : "http://localhost:3000";
+export const API_URL =
+  Platform.OS === "android" ? "http://10.0.2.2:3003" : "http://localhost:3003";
 
 export interface CreateCustomerParams {
   email: string;
@@ -13,30 +14,31 @@ export interface CreateCustomerResponse {
 }
 
 export const createCustomer = async (
-  params: CreateCustomerParams
+  params: CreateCustomerParams,
 ): Promise<CreateCustomerResponse> => {
   const response = await fetch(`${API_URL}/setup-session`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(params),
   });
 
   const data = await response.json();
-  
+
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to create customer');
+    throw new Error(data.error || "Failed to create customer");
   }
 
   return data;
 };
 
 export interface CreatePaymentIntentParams {
-  paymentMethodId: string;
+  confirmationTokenId: string;
   amount: number;
   currency: string;
   setup_future_usage?: string;
+  paymentMethodTypes?: string[];
   storeCreditApplied?: number;
   total?: number;
   customerId?: string;
@@ -49,7 +51,7 @@ export interface PaymentIntentResponse {
 }
 
 export async function createPaymentIntent(
-  params: CreatePaymentIntentParams
+  params: CreatePaymentIntentParams,
 ): Promise<PaymentIntentResponse> {
   const response = await fetch(`${API_URL}/create-intent`, {
     method: "POST",
@@ -68,6 +70,88 @@ export async function createPaymentIntent(
   return data;
 }
 
+export interface CreateSetupIntentParams {
+  confirmationTokenId: string;
+  customerId: string;
+  usage?: "off_session" | "on_session";
+}
+
+export interface SetupIntentResponse {
+  clientSecret?: string;
+}
+
+export async function createSetupIntent(
+  params: CreateSetupIntentParams,
+): Promise<SetupIntentResponse> {
+  const response = await fetch(`${API_URL}/create-setup-intent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Server error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data;
+}
+
+export interface CreateKlarnaSetupIntentParams {
+  email: string;
+  name?: string;
+}
+
+export interface KlarnaSetupIntentResponse {
+  clientSecret: string;
+  customerId: string;
+}
+
+export async function createKlarnaSetupIntent(
+  params: CreateKlarnaSetupIntentParams,
+): Promise<KlarnaSetupIntentResponse> {
+  const response = await fetch(`${API_URL}/create-klarna-setup-intent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || `Server error: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export interface CreateKlarnaPaymentIntentParams {
+  customerId?: string;
+}
+
+export interface KlarnaPaymentIntentResponse {
+  clientSecret: string;
+}
+
+export async function createKlarnaPaymentIntent(): Promise<KlarnaPaymentIntentResponse> {
+  const response = await fetch(`${API_URL}/create-payment-intent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || `Server error: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export interface CreateSubscriptionIntentParams {
   amount: number;
   currency?: string;
@@ -83,12 +167,12 @@ export interface CreateSubscriptionIntentResponse {
 }
 
 export const createSubscriptionIntent = async (
-  params: CreateSubscriptionIntentParams
+  params: CreateSubscriptionIntentParams,
 ): Promise<CreateSubscriptionIntentResponse> => {
   const response = await fetch(`${API_URL}/create-subscription-intent`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(params),
   });
@@ -96,7 +180,7 @@ export const createSubscriptionIntent = async (
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to create subscription intent');
+    throw new Error(data.error || "Failed to create subscription intent");
   }
 
   return data;
@@ -108,12 +192,12 @@ export interface ConfirmSubscriptionParams {
 }
 
 export const confirmSubscription = async (
-  params: ConfirmSubscriptionParams
+  params: ConfirmSubscriptionParams,
 ): Promise<any> => {
   const response = await fetch(`${API_URL}/confirm-subscription`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(params),
   });
@@ -121,7 +205,7 @@ export const confirmSubscription = async (
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to confirm subscription');
+    throw new Error(data.error || "Failed to confirm subscription");
   }
 
   return data;
@@ -143,13 +227,12 @@ export interface CreateSubscriptionResponse {
   customerId: string;
 }
 
-export const createSubscription = async (
-  // params: CreateSubscriptionParams
-): Promise<CreateSubscriptionResponse> => {
+export const createSubscription = async () // params: CreateSubscriptionParams
+: Promise<CreateSubscriptionResponse> => {
   const response = await fetch(`${API_URL}/create-subscription`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     // body: JSON.stringify(params),
   });
@@ -157,7 +240,7 @@ export const createSubscription = async (
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to create subscription');
+    throw new Error(data.error || "Failed to create subscription");
   }
 
   return data;
@@ -165,26 +248,28 @@ export const createSubscription = async (
 
 export const getSubscription = async (subscriptionId: string): Promise<any> => {
   const response = await fetch(`${API_URL}/subscription/${subscriptionId}`, {
-    method: 'GET',
+    method: "GET",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
   });
 
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch subscription');
+    throw new Error(data.error || "Failed to fetch subscription");
   }
 
   return data;
 };
 
-export const cancelSubscription = async (subscriptionId: string): Promise<any> => {
+export const cancelSubscription = async (
+  subscriptionId: string,
+): Promise<any> => {
   const response = await fetch(`${API_URL}/cancel-subscription`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({ subscriptionId }),
   });
@@ -192,7 +277,7 @@ export const cancelSubscription = async (subscriptionId: string): Promise<any> =
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to cancel subscription');
+    throw new Error(data.error || "Failed to cancel subscription");
   }
 
   return data;
