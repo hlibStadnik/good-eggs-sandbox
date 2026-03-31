@@ -12,7 +12,7 @@ import { createKlarnaPaymentIntent } from "../api";
 
 // Klarna simple PaymentIntent – DE / EUR
 export default function KlarnaPaymentScreen() {
-  const [email, setEmail] = useState("customer@email.de");
+  const [email, setEmail] = useState("customer@email.uk");
   const { confirmPayment, loading: confirmLoading } = useConfirmPayment();
 
   const handlePayPress = async () => {
